@@ -1,64 +1,177 @@
 # TodoApp-RewardHub-Typescript-v1
+TypeScript + Express + Prisma (Postgres) backend for **RewardHub / TodoGamify** - a gamified to-do app where users complete tasks to earn points, maintain streaks, and climb a leaderboard.
 
-This folder is the backend’s “brain and body”. When the frontend says “please do something”, the code in here listens, thinks, talks to the database, and answers back.
+## Objective & Aim
 
-## What’s inside `src/`
+- Turn everyday tasks into a game loop (points, streaks, progress).
+- Provide a clean REST API for authentication, task tracking, dashboards, and leaderboards.
+- Keep the backend easy to run locally so a recruiter (or a beginner) can set it up quickly.
 
-- `server.ts` — starts the Express app, plugs in middleware, mounts routes, starts cron jobs, and shuts down gracefully.
-- Folders (each has its own `README.md`): `config/`, `routes/`, `middleware/`, `controllers/`, `services/`, `utils/`, `types/`, `jobs/`.
+## Tech Stack
 
-## The big story (how a request walks through the app)
+- Runtime: Node.js
+- Language: TypeScript
+- Server: Express
+- Database: PostgreSQL + Prisma ORM
+- Auth: JWT access token + refresh token (httpOnly cookie)
+- Validation: Zod
+- Security/ops: Helmet, CORS, rate limiting, Morgan logging, cookie-parser
+- Jobs: node-cron (daily resets / cleanup)
 
-1. `server.ts` opens the door (starts Express) and adds safety gear (security, CORS, rate limits).
-2. `routes/` chooses *which* “page” (endpoint) you want.
-3. `middleware/` are the “helpers at the door” (check token, validate body, limit spam).
-4. `controllers/` are the “teachers” (they read the request and decide what to do).
-5. `services/` are the “workers” (real business logic + Prisma database calls).
-6. `utils/` are “toolboxes” (JWT, passwords, validation, helper functions).
-7. `config/` is the “settings drawer” (env vars + database client).
-8. If anything breaks, `middleware/errorHandler.ts` cleans it up and returns a nice error.
+## Project Structure (high level)
 
-## Where to read next
+```text
+TsBackend/
+  prisma/              # schema, migrations, seed
+  src/
+    config/            # env + DB setup
+    controllers/       # request handlers
+    middleware/        # auth, validation, error handling, rate limiter
+    routes/            # express routers (mounted under /api)
+    services/          # business logic (tasks, streaks, users, auth)
+    utils/             # helpers (jwt, password hashing, validation)
+    server.ts          # app + middleware + server startup
+  dist/                # build output (generated)
+```
 
-- `config/README.md` — settings + database connection
-- `routes/README.md` — all URLs and what they do
-- `middleware/README.md` — authentication, validation, rate limiting, error handling
-- `controllers/README.md` — request handlers (thin layer)
-- `services/README.md` — business logic + Prisma queries
-- `utils/README.md` — helper functions (JWT, passwords, Zod schemas, etc.)
-- `types/README.md` — shared TypeScript types
-- `jobs/README.md` — cron jobs (scheduled background work)
+## Quick Start (novice-friendly)
 
-## Dependencies (explained like you’re 5)
+### 1) Prerequisites
 
-Think of dependencies like toys we borrow so we don’t have to build everything from scratch:
+- Node.js (LTS recommended)
+- PostgreSQL database (local Postgres or a hosted one like Neon)
 
-- `express` — the “door + hallway” where web requests come in and responses go out.
-- `helmet` — the “helmet” for safer HTTP headers.
-- `cors` — the “bouncer” that decides which website is allowed to talk to the API.
-- `cookie-parser` — reads cookies so `/auth/refresh` can find the `refreshToken`.
-- `morgan` — the “diary” that writes down requests (logs) while you develop.
-- `dotenv` — reads `.env` so secrets/settings become `process.env.*`.
-- `zod` — the “teacher” that checks if data looks correct (env validation + request body validation).
-- `@prisma/client` + `prisma` — the “robot hands” for talking to the database with nice TypeScript types.
-- `pg` + `@prisma/adapter-pg` — the “Postgres cable” Prisma uses to connect to the DB.
-- `jsonwebtoken` — makes and checks “ID stickers” (JWT access/refresh tokens).
-- `bcryptjs` — locks/unlocks passwords (hash + compare).
-- `express-rate-limit` — stops “button mashing” (too many requests).
-- `node-cron` — an “alarm clock” that runs jobs on a schedule.
-- `date-fns` — small “calendar ruler” helpers for dates (streaks, weeks, cooldowns).
+### 2) Install dependencies
 
-Notes:
-- This project uses ESM (`"type": "module"`), so many imports end in `.js` even though the files are `.ts`.
+From the `TsBackend/` folder:
 
-## “Where do I see these dependencies in code?”
+```bash
+npm install
+```
 
-- `express` → `server.ts`, `routes/*.ts`, `middleware/*.ts` (Request/Response types)
-- `helmet`, `cors`, `cookie-parser`, `morgan` → `server.ts` (global middleware)
-- `dotenv`, `zod` → `config/env.ts` (loads + validates env vars), `utils/validation.ts` (validates request bodies)
-- `@prisma/client`, `pg`, `@prisma/adapter-pg` → `config/database.ts` + `services/*.ts`
-- `jsonwebtoken` → `utils/jwt.ts` + `middleware/authenticate.ts`
-- `bcryptjs` → `utils/password.ts` + `services/auth.service.ts`
-- `express-rate-limit` → `middleware/rateLimiter.ts`
-- `node-cron` → `jobs/cronJobs.ts`
-- `date-fns` → `utils/helpers.ts`, `services/*.ts`
+### 3) Create your environment file
+
+Copy the example env file and edit values:
+
+```bash
+cp .env.example .env
+```
+
+On Windows PowerShell:
+
+```powershell
+Copy-Item .env.example .env
+```
+
+Minimum you must set in `.env`:
+
+- `DATABASE_URL` (Postgres connection string)
+- `JWT_ACCESS_SECRET` and `JWT_REFRESH_SECRET` (long random strings)
+- `FRONTEND_URL` (usually `http://localhost:5173` for the Vite frontend)
+
+### 4) Prisma setup (database)
+
+```bash
+npm run prisma:generate
+npm run prisma:migrate
+```
+
+Optional seed:
+
+```bash
+npm run prisma:seed
+```
+
+### 5) Start the API
+
+```bash
+npm run dev
+```
+
+By default, the server runs on `http://localhost:3000` and the health check is:
+
+- `GET http://localhost:3000/api/health`
+
+## How the Frontend Connects
+
+The React frontend uses Axios with a base URL that points at this backend:
+
+- Frontend API client: `frontend/Rewardhub/src/services/api.ts`
+  - `VITE_API_URL` (optional) OR defaults to `http://localhost:3000/api`
+
+Recommended local setup (Vite proxy):
+
+1. Set frontend env `VITE_API_URL=/api` (create `frontend/Rewardhub/.env` if you don’t have one).
+2. Keep Vite proxy enabled in `frontend/Rewardhub/vite.config.ts` (it proxies `/api` → `http://localhost:3000`).
+
+This avoids CORS headaches because the browser calls the Vite dev server, which forwards API requests to the backend.
+
+## Auth Model (what to expect)
+
+- Access token: returned in JSON; send it on requests as `Authorization: Bearer <token>`.
+- Refresh token: stored as an `httpOnly` cookie named `refreshToken`.
+- Refresh rotation: `POST /api/auth/refresh` rotates the refresh cookie and returns a new access token.
+
+## API Response Shapes
+
+- Success: `{ success: true, data: <payload>, message?: string }`
+- Pagination: `{ success: true, data: <items>, pagination: { page, limit, total, totalPages, hasMore } }`
+- Error: `{ success: false, message: string }` (may include extra debug details in development)
+
+## Routes (REST API)
+
+All endpoints are under the `/api` prefix.
+
+### Health
+
+- `GET /api/health` - liveness check
+
+### Auth
+
+- `POST /api/auth/register` - register and set refresh cookie
+- `POST /api/auth/login` - login and set refresh cookie
+- `POST /api/auth/refresh` - rotate refresh cookie, return new access token
+- `POST /api/auth/logout` - clears refresh cookie (requires access token)
+- `GET /api/auth/me` - current user (requires access token)
+
+### Tasks (requires auth)
+
+- `GET /api/tasks`
+- `GET /api/tasks/:taskId`
+- `POST /api/tasks/:taskId/complete`
+- `GET /api/tasks/stats`
+- `GET /api/tasks/history?limit=10`
+- `GET /api/tasks/daily-points`
+
+Note: some task mutation endpoints may be intentionally disabled (returning `403`) depending on product rules.
+
+### Users (requires auth)
+
+- `GET /api/users/dashboard`
+- `GET /api/users/profile`
+- `GET /api/users/rank`
+
+### Leaderboard
+
+- `GET /api/leaderboard?page=1&limit=20`
+- `GET /api/leaderboard/top?limit=10`
+- `GET /api/leaderboard/stats`
+
+## API Testing in VS Code (Thunder Client)
+
+1. Install the VS Code extension **Thunder Client**.
+2. Create a Thunder environment, e.g.:
+   - `BASE_URL` = `http://localhost:3000/api`
+   - `ACCESS_TOKEN` = (leave empty initially)
+3. Create a request: `POST {{BASE_URL}}/auth/login`
+   - Body (JSON): `{ "email": "...", "password": "..." }`
+   - After login, copy the returned access token into `ACCESS_TOKEN`.
+4. For protected routes (tasks/users), add header:
+   - `Authorization: Bearer {{ACCESS_TOKEN}}`
+5. Refresh flow:
+   - Call `POST {{BASE_URL}}/auth/refresh`
+   - Make sure Thunder Client cookie storage is enabled so it can send the `refreshToken` cookie automatically.
+
+## License
+
+MIT - see `LICENSE`.
