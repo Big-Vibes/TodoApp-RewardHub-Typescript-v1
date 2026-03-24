@@ -1,0 +1,191 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+//User = Task  ->
+
+enum Role {
+  USER
+  ADMIN
+  MODERATOR
+}
+
+enum TaskHistoryAction {
+  CREATED
+  COMPLETED
+  RESET
+  DELETED
+}
+
+// USER MODEL
+// 
+
+model User {
+  id            String    @id @default(uuid())
+  email         String    @unique
+  passwordHash  String    @map("password_hash")
+  username      String?   @unique
+  role          Role      @default(USER)
+  
+  // Gamification fields
+  totalPoints   Int       @default(0) @map("total_points")
+  currentLevel  Int       @default(1) @map("current_level")
+  // Status & security
+  isActive      Boolean   @default(true) @map("is_active")
+  isEmailVerified Boolean @default(false) @map("is_email_verified")
+  lastLogin     DateTime? @map("last_login")
+  
+  // Timestamps
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  // Relations
+  tasks         Task[]
+  streak        Streak?
+  taskHistory   TaskHistory[]
+  refreshTokens RefreshToken[]
+
+  // Indexes for performance
+  @@index([totalPoints(sort: Desc)], name: "idx_user_leaderboard")
+  @@index([email], name: "idx_user_email")
+  @@index([isActive], name: "idx_user_active")
+  @@map("users")
+}
+
+// ============================================
+// TASK MODEL
+// ============================================
+
+model Task {
+  id              String    @id @default(uuid())
+  userId          String    @map("user_id")
+  
+  // Task details
+  title           String
+  description     String?
+  pointValue      Int       @default(20) @map("point_value")
+  
+  // Status tracking
+  isCompleted     Boolean   @default(false) @map("is_completed")
+  completedAt     DateTime? @map("completed_at")
+  
+  // Reset logic
+  lastResetAt     DateTime  @default(now()) @map("last_reset_at")
+  
+  // Anti-abuse mechanism
+  cooldownUntil   DateTime? @map("cooldown_until")
+  completionCount Int       @default(0) @map("completion_count")
+  
+  // Timestamps
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  // Relations
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Indexes
+  @@index([userId, isCompleted], name: "idx_task_user_status")
+  @@index([completedAt], name: "idx_task_completed")
+  @@index([cooldownUntil], name: "idx_task_cooldown")
+  @@map("tasks")
+}
+
+// ============================================
+// STREAK MODEL
+// ============================================
+
+model Streak {
+  id              String    @id @default(uuid())
+  userId          String    @unique @map("user_id")
+  
+  // Streak tracking
+  currentStreak   Int       @default(0) @map("current_streak")
+  longestStreak   Int       @default(0) @map("longest_streak")
+  
+  // Weekly tracking (Monday - Sunday)
+  weekStartDate   DateTime  @map("week_start_date")
+  weekEndDate     DateTime  @map("week_end_date")
+  
+  // Last activity
+  lastCompletedAt DateTime? @map("last_completed_at")
+  
+  // Timestamps
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  // Relations
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Indexes
+  @@index([userId], name: "idx_streak_user")
+  @@index([currentStreak(sort: Desc)], name: "idx_streak_current")
+  @@map("streaks")
+}
+
+// ============================================
+// TASK HISTORY MODEL (Audit Trail)
+// ============================================
+
+model TaskHistory {
+  id            String              @id @default(uuid())
+  userId        String              @map("user_id")
+  taskId        String              @map("task_id")
+  
+  // Action details
+  action        TaskHistoryAction
+  pointsAwarded Int                 @default(0) @map("points_awarded")
+  metadata      Json?               // Additional context (optional)
+  
+  // Timestamp
+  timestamp     DateTime            @default(now())
+
+  // Relations
+  user          User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Indexes
+  @@index([userId, timestamp(sort: Desc)], name: "idx_history_user_time")
+  @@index([taskId, timestamp(sort: Desc)], name: "idx_history_task_time")
+  @@map("task_history")
+}
+
+// ============================================
+// REFRESH TOKEN MODEL
+// ============================================
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  token     String   @unique
+  
+  // Token lifecycle
+  expiresAt DateTime @map("expires_at")
+  isRevoked Boolean  @default(false) @map("is_revoked")
+  
+  // Device tracking (optional but useful)
+  userAgent String?  @map("user_agent")
+  ipAddress String?  @map("ip_address")
+  
+  // Timestamps
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Indexes
+  @@index([token], name: "idx_refresh_token")
+  @@index([userId], name: "idx_refresh_user")
+  @@index([expiresAt], name: "idx_refresh_expiry")
+  @@map("refresh_tokens")
+}
+
